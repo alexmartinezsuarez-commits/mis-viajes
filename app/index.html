@@ -147,6 +147,24 @@ function upcomingDates() {
   return out;
 }
 
+// Cada viernes y domingo cuenta como viaje hecho salvo que lo marques "No voy" (skip).
+// Desde settings.since (primer uso) hasta hoy se crean los viajes que falten, aunque vayas solo.
+function ensureSince() {
+  if (db.settings.since) return;
+  const first = db.trips.map(t => t.date).sort()[0];
+  db.settings.since = first && first < todayIso() ? first : todayIso();
+  save();
+}
+function materializePast() {
+  const d = parseIso(db.settings.since), today = todayIso();
+  let added = false;
+  for (; iso(d) <= today; d.setDate(d.getDate() + 1)) {
+    if ((d.getDay() === 5 || d.getDay() === 0) && !tripOn(iso(d))) { ensureTrip(iso(d)); added = true; }
+  }
+  if (added) save();
+}
+const counts = t => !t.skip;
+
 // ---------- dinero ----------
 const eur = n => (isFinite(n) ? n : 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 const num = s => parseFloat(String(s).replace(',', '.'));
@@ -202,7 +220,7 @@ async function refreshPrices() {
   const today = todayIso();
   let changed = false;
   for (const t of db.trips) {
-    if (t.fuelSource === 'manual') continue;
+    if (t.fuelSource === 'manual' || t.skip) continue;
     const final = t.date <= today;
     if (t.fuelSource === 'auto' && t.fuelFinal) continue;
     try {
@@ -227,7 +245,7 @@ function ensureTrip(date) {
 }
 function pruneEmpty(t) {
   // Un viaje futuro sin pasajeros ni datos vuelve a ser solo una fecha.
-  if (t.date > todayIso() && !t.passengers.length && !t.extra && !t.note && t.fuelSource !== 'manual') {
+  if (t.date > todayIso() && !t.passengers.length && !t.extra && !t.note && !t.skip && t.fuelSource !== 'manual') {
     db.trips = db.trips.filter(x => x !== t);
   }
 }
@@ -253,20 +271,35 @@ function balanceHtml(c) {
   return `<span class="${c.balance >= 0 ? 'pos' : 'neg'}">${c.balance >= 0 ? '+' : ''}${eur(c.balance)}</span>`;
 }
 
+function goToggle(date, ev) {
+  ev?.stopPropagation();
+  const t = ensureTrip(date);
+  if (!t.skip && t.passengers.length && !confirm('Tienes pasajeros apuntados. ¿Marcar que no vas?')) return;
+  t.skip = !t.skip;
+  if (!t.skip) pruneEmpty(t);
+  save();
+  if (openDate) renderSheet(); else render();
+  if (!t.skip && t.fuelPrice == null) refreshPrices();
+}
+const goBtn = (date, skip) =>
+  `<button class="toggle ${skip ? '' : 'on'}" onclick="goToggle('${date}', event)">${skip ? 'No voy' : '✓ Voy'}</button>`;
+
 function tripCard(date) {
   const t = tripOn(date);
-  const c = t ? tripCalc(t) : null;
+  const skip = !!t?.skip;
+  const c = t && !skip ? tripCalc(t) : null;
   const dir = dirFor(date);
-  const chips = t && t.passengers.length
+  const chips = skip ? `<span class="muted">No haces este viaje</span>`
+    : t && t.passengers.length
     ? t.passengers.map(p => `<span class="chip ${p.paid ? '' : 'unpaid'}">${esc(person(p.personId)?.name || '¿?')} · ${eur(p.amount)}</span>`).join('')
-    : `<span class="muted">Nadie apuntado todavía</span>`;
-  return `<div class="card" onclick="openTrip('${date}')" style="cursor:pointer">
+    : `<span class="muted">Vas solo, nadie apuntado todavía</span>`;
+  return `<div class="card" onclick="openTrip('${date}')" style="cursor:pointer${skip ? ';opacity:.55' : ''}">
     <div class="row between">
       <div class="trip-head">${fmtDate(date)} <span class="tag">${dir}</span></div>
-      <div>${c && t.passengers.length ? balanceHtml(c) : ''}</div>
+      <div class="row">${c && c.balance != null ? balanceHtml(c) : ''}${goBtn(date, skip)}</div>
     </div>
     <div style="margin-top:8px">${chips}</div>
-    ${c && t.passengers.length ? `<div class="muted" style="margin-top:6px">Cobro ${eur(c.income)} · Diésel ${c.fuel != null ? eur(c.fuel) : '—'}${c.price ? ` (${c.price.toFixed(3).replace('.', ',')} €/L${t.fuelFinal || t.fuelSource === 'manual' ? '' : ' est.'})` : ''}</div>` : ''}
+    ${c && c.fuel != null ? `<div class="muted" style="margin-top:6px">Cobro ${eur(c.income)} · Diésel ${c.fuel != null ? eur(c.fuel) : '—'}${c.price ? ` (${c.price.toFixed(3).replace('.', ',')} €/L${t.fuelFinal || t.fuelSource === 'manual' ? '' : ' est.'})` : ''}</div>` : ''}
   </div>`;
 }
 
@@ -291,8 +324,8 @@ function setWear(v) {
 
 function viewHistorial() {
   const today = todayIso();
-  const past = db.trips.filter(t => t.date <= today && t.passengers.length).sort((a, b) => b.date.localeCompare(a.date));
-  if (!past.length) return `<div class="empty">Aún no hay viajes hechos.<br>Apunta pasajeros en Próximos y aparecerán aquí después del viaje.</div>`;
+  const past = db.trips.filter(t => t.date <= today && counts(t)).sort((a, b) => b.date.localeCompare(a.date));
+  if (!past.length) return `<div class="empty">Aún no hay viajes hechos.<br>Cada viernes y domingo aparecerá aquí cuando pase, salvo que lo marques como "No voy".</div>`;
   let ing = 0, baseCost = 0, wear = 0, pend = 0; const debts = {};
   past.forEach(t => {
     const c = tripCalc(t);
@@ -528,7 +561,8 @@ function renderSheet() {
     : 'sin precio';
   $('#sheet').innerHTML = `<div class="sheet-bg" onclick="if(event.target===this)closeSheet()"><div class="sheet">
     <div class="row between"><h2>${fmtDate(openDate)}</h2><button class="x" onclick="closeSheet()">×</button></div>
-    <span class="tag">${dirFor(openDate)}</span>
+    <div class="row between"><span class="tag">${dirFor(openDate)}</span>${goBtn(openDate, !!t?.skip)}</div>
+    ${t?.skip ? `<div class="muted" style="margin-top:6px">Este viaje no cuenta: lo has marcado como "No voy".</div>` : ''}
 
     <h3>Pasajeros</h3>
     ${(t?.passengers || []).map((p, i) => `<div class="list-item">
@@ -576,6 +610,7 @@ function renderSheet() {
 
 function addPassenger(pid) {
   const t = ensureTrip(openDate);
+  t.skip = false;
   t.passengers.push({ personId: pid, amount: person(pid).price, paid: false });
   save(); renderSheet();
   if (t.fuelPrice == null) autoPrice(true);
@@ -587,6 +622,7 @@ function prevTrip(date) {
 function repeatPrev() {
   const prev = prevTrip(openDate); if (!prev) return;
   const t = ensureTrip(openDate);
+  t.skip = false;
   const inTrip = new Set(t.passengers.map(p => p.personId));
   prev.passengers.filter(p => !inTrip.has(p.personId) && person(p.personId))
     .forEach(p => t.passengers.push({ personId: p.personId, amount: p.amount, paid: false }));
@@ -654,6 +690,8 @@ async function importData(file) {
 // ---------- arranque ----------
 function go(t) { tab = t; window.scrollTo(0, 0); render(); }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.tab));
+ensureSince();
+materializePast();
 render();
 refreshPrices();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
