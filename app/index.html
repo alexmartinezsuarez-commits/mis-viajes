@@ -73,6 +73,10 @@
   .station.sel { background: var(--chip); border-radius: 10px; }
   .bar { height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; margin-top: 6px; }
   .bar > span { display: block; height: 100%; background: var(--brand); }
+  .seg { display: flex; background: var(--chip); border-radius: 10px; padding: 3px; margin: 6px 0 4px; }
+  .seg button { flex: 1; border: 0; background: none; padding: 8px 0; border-radius: 8px; font: inherit; font-size: 14px;
+    color: var(--muted); cursor: pointer; }
+  .seg button.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
   .chart { width: 100%; height: auto; display: block; margin-bottom: 6px; }
   .chart .ax { fill: var(--muted); font-size: 11px; }
   .chart .grid { stroke: var(--line); stroke-width: 1; }
@@ -159,7 +163,8 @@ function tripCalc(t) {
   const wear = km * wearRate;
   const income = t.passengers.reduce((a, p) => a + (p.amount || 0), 0);
   const cobrado = t.passengers.filter(p => p.paid).reduce((a, p) => a + (p.amount || 0), 0);
-  const cost = fuel != null ? fuel + extra + wear : null;
+  // El desgaste no entra en el coste del viaje; solo se suma en Historial si lo pides.
+  const cost = fuel != null ? fuel + extra : null;
   return { km, litros, price, fuel, extra, wear, wearRate, cost, income, cobrado, balance: cost != null ? income - cost : null };
 }
 
@@ -261,7 +266,7 @@ function tripCard(date) {
       <div>${c && t.passengers.length ? balanceHtml(c) : ''}</div>
     </div>
     <div style="margin-top:8px">${chips}</div>
-    ${c && t.passengers.length ? `<div class="muted" style="margin-top:6px">Cobro ${eur(c.income)} · Diésel ${c.fuel != null ? eur(c.fuel) : '—'}${c.price ? ` (${c.price.toFixed(3).replace('.', ',')} €/L${t.fuelFinal || t.fuelSource === 'manual' ? '' : ' est.'})` : ''}${c.wear ? ` · Desgaste ${eur(c.wear)}` : ''}</div>` : ''}
+    ${c && t.passengers.length ? `<div class="muted" style="margin-top:6px">Cobro ${eur(c.income)} · Diésel ${c.fuel != null ? eur(c.fuel) : '—'}${c.price ? ` (${c.price.toFixed(3).replace('.', ',')} €/L${t.fuelFinal || t.fuelSource === 'manual' ? '' : ' est.'})` : ''}</div>` : ''}
   </div>`;
 }
 
@@ -275,33 +280,56 @@ function viewProximos() {
     `<button class="btn ghost" style="width:100%;margin-top:6px" onclick="newTripOtherDay()">+ Viaje en otro día</button>`;
 }
 
+// Modo de Historial: sumar o no el desgaste del coche. Se recuerda en este móvil.
+let histWear = false;
+try { histWear = localStorage.getItem('misviajes.histWear') === '1'; } catch (e) {}
+function setWear(v) {
+  histWear = v;
+  try { localStorage.setItem('misviajes.histWear', v ? '1' : '0'); } catch (e) {}
+  render();
+}
+
 function viewHistorial() {
   const today = todayIso();
   const past = db.trips.filter(t => t.date <= today && t.passengers.length).sort((a, b) => b.date.localeCompare(a.date));
   if (!past.length) return `<div class="empty">Aún no hay viajes hechos.<br>Apunta pasajeros en Próximos y aparecerán aquí después del viaje.</div>`;
-  let ing = 0, cost = 0, pend = 0; const debts = {};
+  let ing = 0, baseCost = 0, wear = 0, pend = 0; const debts = {};
   past.forEach(t => {
     const c = tripCalc(t);
-    ing += c.income; cost += c.cost || 0;
+    ing += c.income; baseCost += c.cost || 0; wear += c.wear;
     t.passengers.filter(p => !p.paid).forEach(p => { pend += p.amount; debts[p.personId] = (debts[p.personId] || 0) + p.amount; });
   });
+  const cost = baseCost + (histWear ? wear : 0);
   const bal = ing - cost;
+  const balOther = histWear ? ing - baseCost : ing - baseCost - wear;
+  // months[k].cost sigue el modo elegido, para que gráfica y lista cuenten lo mismo.
   const months = {};
-  past.forEach(t => { const k = t.date.slice(0, 7); const c = tripCalc(t); (months[k] ||= { ing: 0, cost: 0, n: 0 }); months[k].ing += c.income; months[k].cost += c.cost || 0; months[k].n++; });
+  past.forEach(t => {
+    const k = t.date.slice(0, 7), c = tripCalc(t);
+    (months[k] ||= { ing: 0, cost: 0, n: 0 });
+    months[k].ing += c.income; months[k].cost += (c.cost || 0) + (histWear ? c.wear : 0); months[k].n++;
+  });
   const debtHtml = Object.entries(debts).map(([id, v]) =>
     `<div class="list-item"><div class="grow">${esc(person(id)?.name || '¿?')}</div><div class="warn">${eur(v)}</div></div>`).join('');
-  return `<div class="card">
-      <div class="muted">Balance total (${plural(past.length)})</div>
+  const rate = (db.settings.desgaste ?? WEAR_DEFAULT).toFixed(2).replace('.', ',');
+  const what = histWear ? 'la gasolina y el desgaste' : 'la gasolina';
+  return `<div class="seg">
+      <button class="${histWear ? '' : 'on'}" onclick="setWear(false)">Sin desgaste</button>
+      <button class="${histWear ? 'on' : ''}" onclick="setWear(true)">Con desgaste</button>
+    </div>
+    <div class="card">
+      <div class="muted">Balance total (${plural(past.length)}) · ${histWear ? 'con' : 'sin'} desgaste</div>
       <div class="big ${bal >= 0 ? 'pos' : 'neg'}">${bal >= 0 ? '+' : ''}${eur(bal)}</div>
+      <div class="muted">${histWear ? 'Sin' : 'Con'} desgaste del coche: <b class="${balOther >= 0 ? 'pos' : 'neg'}">${balOther >= 0 ? '+' : ''}${eur(balOther)}</b> (desgaste ${eur(wear)} a ${rate} €/km)</div>
       <div class="grid3" style="margin-top:10px">
         <div><div class="muted">Cobrado</div><div class="v">${eur(ing)}</div></div>
         <div><div class="muted">Gastos</div><div class="v">${eur(cost)}</div></div>
         <div><div class="muted">Pendiente</div><div class="v warn">${eur(pend)}</div></div>
       </div>
-      <div class="muted" style="margin-top:8px">${ing >= cost ? 'Cubres la gasolina con lo que pagan.' : `Pones de tu bolsillo ${eur(cost - ing)}.`} ${cost ? `Cubren el ${Math.round(ing / cost * 100)}% del gasto.` : ''}</div>
+      <div class="muted" style="margin-top:8px">${ing >= cost ? `Cubres ${what} con lo que pagan.` : `Pones de tu bolsillo ${eur(cost - ing)}.`} ${cost ? `Cubren el ${Math.round(ing / cost * 100)}% del gasto.` : ''}</div>
       <div class="bar"><span style="width:${cost ? Math.min(100, ing / cost * 100) : 0}%"></span></div>
     </div>
-    <h3>Balance por mes</h3><div class="card">${chartBalance(months)}</div>
+    <h3>Balance por mes (${histWear ? 'con' : 'sin'} desgaste)</h3><div class="card">${chartBalance(months)}</div>
     <h3>Precio del diésel en tus viajes</h3><div class="card">${chartFuel(past)}</div>
     ${debtHtml ? `<h3>Te deben</h3><div class="card">${debtHtml}</div>` : ''}
     <h3>Por mes</h3><div class="card">${Object.entries(months).sort((a, b) => b[0].localeCompare(a[0])).map(([k, m]) => {
@@ -418,7 +446,7 @@ function viewAjustes() {
       <input id="consumo" type="number" inputmode="decimal" step="0.1" value="${s.consumo}">
       <label>Desgaste del coche (€/km): ruedas, aceite, revisiones…</label>
       <input id="desgaste" type="number" inputmode="decimal" step="0.01" min="0" value="${s.desgaste ?? WEAR_DEFAULT}">
-      <div class="muted">Típico entre 0,04 y 0,10 €/km. Pon 0 para no contarlo.</div>
+      <div class="muted">Típico entre 0,04 y 0,10 €/km. Solo se usa en Historial, en el modo "Con desgaste".</div>
       <label>Semanas a mostrar en Próximos</label>
       <input id="weeks" type="number" min="1" max="12" value="${s.weeks || 4}">
     </div>
@@ -539,12 +567,9 @@ function renderSheet() {
       </div>
       <div class="muted" style="margin-top:10px">
         <div class="row between"><span>Diésel: ${c.km} km × ${db.settings.consumo} L/100 = ${c.litros.toFixed(1).replace('.', ',')} L</span><span>${c.fuel != null ? eur(c.fuel) : '—'}</span></div>
-        ${c.wear ? `<div class="row between"><span>Desgaste: ${c.km} km × ${c.wearRate.toFixed(2).replace('.', ',')} €/km</span><span>${eur(c.wear)}</span></div>` : ''}
         ${c.extra ? `<div class="row between"><span>Otros gastos</span><span>${eur(c.extra)}</span></div>` : ''}
       </div>
-      ${c.cost != null && c.income < c.cost ? `<div class="muted neg" style="text-align:center;margin-top:6px">Te faltan ${eur(c.cost - c.income)} para cubrir el viaje</div>` : ''}
-      ${c.cost != null && c.wear && c.income < c.cost && c.income >= c.cost - c.wear ? `<div class="muted" style="text-align:center">Cubres la gasolina, pero no el desgaste del coche</div>` : ''}
-    </div>
+      ${c.cost != null && c.income < c.cost ? `<div class="muted neg" style="text-align:center;margin-top:6px">Te faltan ${eur(c.cost - c.income)} para cubrir el viaje</div>` : ''}    </div>
     ${t ? `<button class="btn danger" style="width:100%;margin-top:6px" onclick="deleteTrip()">Borrar este viaje</button>` : ''}
   </div></div>`;
 }
