@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mis Viajes</title>
 <meta name="theme-color" content="#0f766e">
+<meta name="color-scheme" content="light only">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -15,12 +16,8 @@
     --brand: #0f766e; --brand-ink: #ffffff; --pos: #15803d; --neg: #b91c1c; --warn: #b45309;
     --chip: #eef2ef; --radius: 14px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #121513; --card: #1b1f1d; --ink: #eceeec; --muted: #9aa29d; --line: #2a302d;
-      --brand: #2dd4bf; --brand-ink: #062a26; --pos: #4ade80; --neg: #f87171; --warn: #fbbf24; --chip: #242a27;
-    }
-  }
+  /* Siempre tema claro, aunque el móvil esté en modo oscuro. */
+  :root { color-scheme: light only; }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--ink);
     font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
