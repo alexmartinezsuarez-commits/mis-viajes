@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mis Viajes</title>
+<meta name="theme-color" content="#0f766e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  :root {
+    --bg: #f4f5f2; --card: #ffffff; --ink: #1c1f1d; --muted: #6b716d; --line: #e3e6e1;
+    --brand: #0f766e; --brand-ink: #ffffff; --pos: #15803d; --neg: #b91c1c; --warn: #b45309;
+    --chip: #eef2ef; --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121513; --card: #1b1f1d; --ink: #eceeec; --muted: #9aa29d; --line: #2a302d;
+      --brand: #2dd4bf; --brand-ink: #062a26; --pos: #4ade80; --neg: #f87171; --warn: #fbbf24; --chip: #242a27;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 14px 16px 8px;
+    padding-top: calc(14px + env(safe-area-inset-top)); }
+  header h1 { margin: 0; font-size: 22px; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  main { padding: 0 16px 110px; max-width: 640px; margin: 0 auto; }
+  nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--card);
+    border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 10; }
+  nav button { flex: 1; border: 0; background: none; color: var(--muted); padding: 10px 0 12px;
+    font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+  nav button .ic { font-size: 20px; }
+  nav button.on { color: var(--brand); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin: 10px 0; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .between { justify-content: space-between; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .big { font-size: 26px; font-weight: 700; }
+  .pos { color: var(--pos); } .neg { color: var(--neg); } .warn { color: var(--warn); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--chip); border-radius: 999px;
+    padding: 4px 10px; font-size: 14px; margin: 3px 4px 3px 0; }
+  .chip.unpaid { outline: 1px dashed var(--warn); }
+  .trip-head { font-weight: 600; text-transform: capitalize; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted);
+    text-transform: uppercase; letter-spacing: .03em; }
+  button.btn, .btn { border: 0; border-radius: 10px; padding: 10px 14px; font-size: 15px; cursor: pointer;
+    background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+  .btn.ghost { background: var(--chip); color: var(--ink); font-weight: 500; }
+  .btn.danger { background: transparent; color: var(--neg); border: 1px solid var(--neg); }
+  .btn.sm { padding: 6px 10px; font-size: 14px; }
+  .btn:disabled { opacity: .5; }
+  input, select { width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+  .grid3 .v { font-weight: 700; font-size: 18px; }
+  .list-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .list-item:first-child { border-top: 0; }
+  .grow { flex: 1; min-width: 0; }
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { background: var(--card); width: 100%; max-width: 640px; max-height: 92vh; overflow: auto;
+    border-radius: 18px 18px 0 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); }
+  .sheet h2 { margin: 0 0 4px; font-size: 20px; text-transform: capitalize; }
+  .toggle { border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px;
+    padding: 4px 10px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .toggle.on { background: var(--pos); border-color: var(--pos); color: #fff; }
+  .amount { width: 74px; text-align: right; padding: 6px 8px; }
+  .x { border: 0; background: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0 4px; }
+  .empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+  .station { cursor: pointer; }
+  .station.sel { background: var(--chip); border-radius: 10px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; margin-top: 6px; }
+  .bar > span { display: block; height: 100%; background: var(--brand); }
+  h3 { margin: 18px 0 6px; font-size: 15px; color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Próximos viajes</h1>
+  <div class="sub" id="subtitle"></div>
+</header>
+<main id="view"></main>
+<nav>
+  <button data-tab="proximos" class="on"><span class="ic">🚗</span>Próximos</button>
+  <button data-tab="historial"><span class="ic">📒</span>Historial</button>
+  <button data-tab="personas"><span class="ic">👥</span>Personas</button>
+  <button data-tab="ajustes"><span class="ic">⚙️</span>Ajustes</button>
+</nav>
+<div id="sheet"></div>
+
+<script>
+const API = 'https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/';
+const KEY = 'misviajes.v1';
+const FUEL_FIELD = 'Precio Gasoleo A';
+
+// ---------- estado ----------
+const defaults = () => ({
+  settings: { km: 0, consumo: 5.8, prov: '', mun: '', munName: '', station: '', stationName: '', weeks: 4 },
+  people: [],
+  trips: []
+});
+let db = load();
+let tab = 'proximos';
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) return Object.assign(defaults(), JSON.parse(raw));
+  } catch (e) {}
+  return defaults();
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { alert('No se pudo guardar: ' + e.message); }
+}
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// ---------- fechas ----------
+const pad = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const todayIso = () => iso(new Date());
+const parseIso = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const fmtDate = s => parseIso(s).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
+const apiDate = s => { const [y, m, d] = s.split('-'); return `${d}-${m}-${y}`; };
+const dirFor = s => parseIso(s).getDay() === 0 ? 'vuelta' : 'ida';
+
+function upcomingDates() {
+  const out = [];
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  const end = new Date(d); end.setDate(end.getDate() + 7 * (db.settings.weeks || 4));
+  for (; d <= end; d.setDate(d.getDate() + 1)) {
+    if (d.getDay() === 5 || d.getDay() === 0) out.push(iso(d));
+  }
+  return out;
+}
+
+// ---------- dinero ----------
+const eur = n => (isFinite(n) ? n : 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+const num = s => parseFloat(String(s).replace(',', '.'));
+const person = id => db.people.find(p => p.id === id);
+const plural = n => `${n} ${n === 1 ? 'viaje' : 'viajes'}`;
+
+function tripCalc(t) {
+  const km = t.km ?? db.settings.km;
+  const litros = km * (db.settings.consumo || 0) / 100;
+  const price = t.fuelPrice;
+  const fuel = price != null ? litros * price : null;
+  const extra = t.extra || 0;
+  const income = t.passengers.reduce((a, p) => a + (p.amount || 0), 0);
+  const cobrado = t.passengers.filter(p => p.paid).reduce((a, p) => a + (p.amount || 0), 0);
+  const cost = fuel != null ? fuel + extra : null;
+  return { km, litros, price, fuel, extra, cost, income, cobrado, balance: cost != null ? income - cost : null };
+}
+
+// ---------- API precios ----------
+const cache = {};
+async function getJSON(url) {
+  if (cache[url]) return cache[url];
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  cache[url] = j;
+  return j;
+}
+async function stationsFor(mun, dateIso) {
+  const url = dateIso && dateIso < todayIso()
+    ? `${API}EstacionesTerrestresHist/FiltroMunicipio/${apiDate(dateIso)}/${mun}`
+    : `${API}EstacionesTerrestres/FiltroMunicipio/${mun}`;
+  const j = await getJSON(url);
+  return j.ListaEESSPrecio || [];
+}
+// Precio del diésel en la gasolinera habitual para una fecha. Futuro -> precio de hoy (estimado).
+async function fuelPriceFor(dateIso) {
+  const s = db.settings;
+  if (!s.station || !s.mun) throw new Error('Elige tu gasolinera en Ajustes');
+  const list = await stationsFor(s.mun, dateIso);
+  const st = list.find(e => e.IDEESS === s.station);
+  if (!st) throw new Error('Gasolinera no encontrada para esa fecha');
+  const p = num(st[FUEL_FIELD]);
+  if (!isFinite(p)) throw new Error('Sin precio de diésel ese día');
+  return p;
+}
+
+// Rellena precios automáticos: viajes pasados/hoy sin precio fijo, y futuros con estimación de hoy.
+async function refreshPrices() {
+  const today = todayIso();
+  let changed = false;
+  for (const t of db.trips) {
+    if (t.fuelSource === 'manual') continue;
+    const final = t.date <= today;
+    if (t.fuelSource === 'auto' && t.fuelFinal) continue;
+    try {
+      const p = await fuelPriceFor(t.date);
+      t.fuelPrice = p; t.fuelSource = 'auto'; t.fuelFinal = final && t.date < today;
+      changed = true;
+    } catch (e) { /* sin red o sin gasolinera: se queda como está */ }
+  }
+  if (changed) { save(); render(); }
+}
+
+// ---------- viajes ----------
+function tripOn(date) { return db.trips.find(t => t.date === date); }
+function ensureTrip(date) {
+  let t = tripOn(date);
+  if (!t) {
+    t = { id: uid(), date, dir: dirFor(date), passengers: [], fuelPrice: null, fuelSource: null, extra: 0, note: '' };
+    db.trips.push(t);
+    db.trips.sort((a, b) => a.date.localeCompare(b.date));
+  }
+  return t;
+}
+function pruneEmpty(t) {
+  // Un viaje futuro sin pasajeros ni datos vuelve a ser solo una fecha.
+  if (t.date > todayIso() && !t.passengers.length && !t.extra && !t.note && t.fuelSource !== 'manual') {
+    db.trips = db.trips.filter(x => x !== t);
+  }
+}
+
+// ---------- render ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function render() {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  const titles = { proximos: 'Próximos viajes', historial: 'Historial', personas: 'Personas', ajustes: 'Ajustes' };
+  $('#title').textContent = titles[tab];
+  $('#subtitle').textContent = db.settings.stationName
+    ? `⛽ ${db.settings.stationName} · ${db.settings.km || '?'} km · ${db.settings.consumo} L/100`
+    : 'Configura tu ruta y gasolinera en Ajustes';
+  $('#view').innerHTML = ({ proximos: viewProximos, historial: viewHistorial, personas: viewPersonas, ajustes: viewAjustes })[tab]();
+  if (tab === 'ajustes') bindAjustes();
+}
+
+function balanceHtml(c) {
+  if (c.balance == null) return `<span class="muted">sin precio</span>`;
+  return `<span class="${c.balance >= 0 ? 'pos' : 'neg'}">${c.balance >= 0 ? '+' : ''}${eur(c.balance)}</span>`;
+}
+
+function tripCard(date) {
+  const t = tripOn(date);
+  const c = t ? tripCalc(t) : null;
+  const dir = dirFor(date);
+  const chips = t && t.passengers.length
+    ? t.passengers.map(p => `<span class="chip ${p.paid ? '' : 'unpaid'}">${esc(person(p.personId)?.name || '¿?')} · ${eur(p.amount)}</span>`).join('')
+    : `<span class="muted">Nadie apuntado todavía</span>`;
+  return `<div class="card" onclick="openTrip('${date}')" style="cursor:pointer">
+    <div class="row between">
+      <div class="trip-head">${fmtDate(date)} <span class="tag">${dir}</span></div>
+      <div>${c && t.passengers.length ? balanceHtml(c) : ''}</div>
+    </div>
+    <div style="margin-top:8px">${chips}</div>
+    ${c && t.passengers.length ? `<div class="muted" style="margin-top:6px">Cobro ${eur(c.income)} · Diésel ${c.fuel != null ? eur(c.fuel) : '—'}${c.price ? ` (${c.price.toFixed(3).replace('.', ',')} €/L${t.fuelFinal || t.fuelSource === 'manual' ? '' : ' est.'})` : ''}</div>` : ''}
+  </div>`;
+}
+
+function viewProximos() {
+  const setup = !db.settings.km || !db.settings.station
+    ? `<div class="card warn">Falta configurar ${!db.settings.km ? 'los km del trayecto' : ''}${!db.settings.km && !db.settings.station ? ' y ' : ''}${!db.settings.station ? 'tu gasolinera' : ''}. <a href="#" onclick="go('ajustes');return false">Ir a Ajustes</a></div>` : '';
+  const dates = upcomingDates();
+  const extra = db.trips.filter(t => t.date >= todayIso() && !dates.includes(t.date)).map(t => t.date);
+  const all = [...new Set([...dates, ...extra])].sort();
+  return setup + all.map(tripCard).join('') +
+    `<button class="btn ghost" style="width:100%;margin-top:6px" onclick="newTripOtherDay()">+ Viaje en otro día</button>`;
+}
+
+function viewHistorial() {
+  const today = todayIso();
+  const past = db.trips.filter(t => t.date <= today && t.passengers.length).sort((a, b) => b.date.localeCompare(a.date));
+  if (!past.length) return `<div class="empty">Aún no hay viajes hechos.<br>Apunta pasajeros en Próximos y aparecerán aquí después del viaje.</div>`;
+  let ing = 0, cost = 0, pend = 0; const debts = {};
+  past.forEach(t => {
+    const c = tripCalc(t);
+    ing += c.income; cost += c.cost || 0;
+    t.passengers.filter(p => !p.paid).forEach(p => { pend += p.amount; debts[p.personId] = (debts[p.personId] || 0) + p.amount; });
+  });
+  const bal = ing - cost;
+  const months = {};
+  past.forEach(t => { const k = t.date.slice(0, 7); const c = tripCalc(t); (months[k] ||= { ing: 0, cost: 0, n: 0 }); months[k].ing += c.income; months[k].cost += c.cost || 0; months[k].n++; });
+  const debtHtml = Object.entries(debts).map(([id, v]) =>
+    `<div class="list-item"><div class="grow">${esc(person(id)?.name || '¿?')}</div><div class="warn">${eur(v)}</div></div>`).join('');
+  return `<div class="card">
+      <div class="muted">Balance total (${plural(past.length)})</div>
+      <div class="big ${bal >= 0 ? 'pos' : 'neg'}">${bal >= 0 ? '+' : ''}${eur(bal)}</div>
+      <div class="grid3" style="margin-top:10px">
+        <div><div class="muted">Cobrado</div><div class="v">${eur(ing)}</div></div>
+        <div><div class="muted">Diésel+otros</div><div class="v">${eur(cost)}</div></div>
+        <div><div class="muted">Pendiente</div><div class="v warn">${eur(pend)}</div></div>
+      </div>
+      <div class="muted" style="margin-top:8px">${ing >= cost ? 'Cubres la gasolina con lo que pagan.' : `Pones de tu bolsillo ${eur(cost - ing)}.`} ${cost ? `Cubren el ${Math.round(ing / cost * 100)}% del gasto.` : ''}</div>
+      <div class="bar"><span style="width:${cost ? Math.min(100, ing / cost * 100) : 0}%"></span></div>
+    </div>
+    ${debtHtml ? `<h3>Te deben</h3><div class="card">${debtHtml}</div>` : ''}
+    <h3>Por mes</h3><div class="card">${Object.entries(months).sort((a, b) => b[0].localeCompare(a[0])).map(([k, m]) => {
+      const b = m.ing - m.cost;
+      const label = parseIso(k + '-01').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+      return `<div class="list-item"><div class="grow">${label[0].toUpperCase() + label.slice(1)}<div class="muted">${plural(m.n)} ·${eur(m.ing)} − ${eur(m.cost)}</div></div><div class="${b >= 0 ? 'pos' : 'neg'}">${b >= 0 ? '+' : ''}${eur(b)}</div></div>`;
+    }).join('')}</div>
+    <h3>Viajes</h3>${past.map(t => tripCard(t.date)).join('')}`;
+}
+
+function viewPersonas() {
+  const stats = id => {
+    let n = 0, total = 0;
+    db.trips.filter(t => t.date <= todayIso()).forEach(t => t.passengers.forEach(p => { if (p.personId === id) { n++; total += p.amount; } }));
+    return { n, total };
+  };
+  const list = db.people.length ? db.people.map(p => {
+    const s = stats(p.id);
+    return `<div class="list-item">
+      <div class="grow"><b>${esc(p.name)}</b><div class="muted">${plural(s.n)} ·${eur(s.total)} en total</div></div>
+      <input class="amount" type="number" inputmode="decimal" step="0.5" value="${p.price}" onchange="setPrice('${p.id}', this.value)"> €
+      <button class="x" onclick="delPerson('${p.id}')" title="Borrar">×</button>
+    </div>`;
+  }).join('') : `<div class="empty">Añade a tus amigos con lo que te pagan normalmente.</div>`;
+  return `<div class="card">${list}</div>
+    <div class="card"><div class="row">
+      <input id="newName" placeholder="Nombre" class="grow">
+      <select id="newPrice" style="width:90px"><option value="8">8 €</option><option value="10" selected>10 €</option></select>
+      <button class="btn" onclick="addPerson()">Añadir</button>
+    </div></div>`;
+}
+
+function viewAjustes() {
+  const s = db.settings;
+  return `<div class="card">
+      <label>Km del trayecto (solo ida)</label>
+      <input id="km" type="number" inputmode="decimal" value="${s.km || ''}" placeholder="p. ej. 210">
+      <label>Consumo (L/100 km)</label>
+      <input id="consumo" type="number" inputmode="decimal" step="0.1" value="${s.consumo}">
+      <label>Semanas a mostrar en Próximos</label>
+      <input id="weeks" type="number" min="1" max="12" value="${s.weeks || 4}">
+    </div>
+    <div class="card">
+      <div class="row between"><b>Gasolinera habitual (diésel)</b></div>
+      <div class="muted">${s.stationName ? 'Actual: ' + esc(s.stationName) + ' · ' + esc(s.munName) : 'Sin elegir'}</div>
+      <label>Provincia</label><select id="prov"><option value="">Cargando…</option></select>
+      <label>Municipio</label><select id="mun" disabled><option value="">—</option></select>
+      <div id="stations" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <b>Copia de seguridad</b>
+      <div class="muted">Tus datos solo están en este móvil. Exporta de vez en cuando.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="exportData()">Exportar</button>
+        <label class="btn ghost" style="margin:0;color:var(--ink);font-size:15px">Importar<input type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])"></label>
+      </div>
+    </div>`;
+}
+
+async function bindAjustes() {
+  const s = db.settings;
+  ['km', 'consumo', 'weeks'].forEach(id => $('#' + id).addEventListener('change', e => {
+    s[id] = num(e.target.value) || 0; save();
+    $('#subtitle').textContent = s.stationName ? `⛽ ${s.stationName} · ${s.km || '?'} km · ${s.consumo} L/100` : '';
+  }));
+  const provSel = $('#prov'), munSel = $('#mun');
+  try {
+    const provs = await getJSON(API + 'Listados/Provincias/');
+    provSel.innerHTML = '<option value="">Elige provincia</option>' + provs
+      .sort((a, b) => a.Provincia.localeCompare(b.Provincia))
+      .map(p => `<option value="${p.IDPovincia}" ${p.IDPovincia === s.prov ? 'selected' : ''}>${esc(p.Provincia)}</option>`).join('');
+  } catch (e) { provSel.innerHTML = '<option>Sin conexión con el Ministerio</option>'; return; }
+
+  const loadMuns = async prov => {
+    munSel.disabled = true; munSel.innerHTML = '<option>Cargando…</option>';
+    const muns = await getJSON(API + 'Listados/MunicipiosPorProvincia/' + prov);
+    munSel.innerHTML = '<option value="">Elige municipio</option>' + muns
+      .map(m => `<option value="${m.IDMunicipio}" ${m.IDMunicipio === s.mun ? 'selected' : ''}>${esc(m.Municipio)}</option>`).join('');
+    munSel.disabled = false;
+  };
+  const loadStations = async mun => {
+    const box = $('#stations'); box.innerHTML = '<div class="muted">Buscando gasolineras…</div>';
+    const list = (await stationsFor(mun)).filter(e => e[FUEL_FIELD]);
+    if (!list.length) { box.innerHTML = '<div class="muted">No hay gasolineras con diésel en este municipio.</div>'; return; }
+    box.innerHTML = list.sort((a, b) => num(a[FUEL_FIELD]) - num(b[FUEL_FIELD])).map(e =>
+      `<div class="list-item station ${e.IDEESS === s.station ? 'sel' : ''}" data-id="${e.IDEESS}" data-name="${esc(e['Rótulo'] + ' · ' + e['Dirección'])}">
+        <div class="grow"><b>${esc(e['Rótulo'])}</b><div class="muted">${esc(e['Dirección'])}</div></div>
+        <div><b>${esc(e[FUEL_FIELD])}</b> €/L</div></div>`).join('');
+    box.querySelectorAll('.station').forEach(el => el.onclick = () => {
+      s.station = el.dataset.id; s.stationName = el.dataset.name; s.mun = mun;
+      s.munName = munSel.options[munSel.selectedIndex].text; s.prov = provSel.value;
+      db.trips.forEach(t => { if (t.fuelSource === 'auto') { t.fuelSource = null; t.fuelFinal = false; } });
+      save(); render(); refreshPrices();
+    });
+  };
+  provSel.onchange = () => provSel.value && loadMuns(provSel.value).catch(() => {});
+  munSel.onchange = () => munSel.value && loadStations(munSel.value).catch(() => { $('#stations').innerHTML = '<div class="muted">Error al cargar.</div>'; });
+  if (s.prov) { await loadMuns(s.prov).catch(() => {}); if (s.mun) loadStations(s.mun).catch(() => {}); }
+}
+
+// ---------- hoja de viaje ----------
+let openDate = null;
+function openTrip(date) { openDate = date; renderSheet(); }
+function closeSheet() {
+  const t = tripOn(openDate); if (t) { pruneEmpty(t); save(); }
+  openDate = null; $('#sheet').innerHTML = ''; render();
+}
+function renderSheet() {
+  if (!openDate) return;
+  const t = tripOn(openDate);
+  const c = t ? tripCalc(t) : tripCalc({ passengers: [], fuelPrice: null });
+  const inTrip = new Set((t?.passengers || []).map(p => p.personId));
+  const available = db.people.filter(p => !inTrip.has(p.id));
+  const priceLabel = t?.fuelPrice != null
+    ? `${t.fuelPrice.toFixed(3).replace('.', ',')} €/L · ${t.fuelSource === 'manual' ? 'manual' : t.fuelFinal ? 'precio de ese día' : 'precio de hoy (estimado)'}`
+    : 'sin precio';
+  $('#sheet').innerHTML = `<div class="sheet-bg" onclick="if(event.target===this)closeSheet()"><div class="sheet">
+    <div class="row between"><h2>${fmtDate(openDate)}</h2><button class="x" onclick="closeSheet()">×</button></div>
+    <span class="tag">${dirFor(openDate)}</span>
+
+    <h3>Pasajeros</h3>
+    ${(t?.passengers || []).map((p, i) => `<div class="list-item">
+        <div class="grow">${esc(person(p.personId)?.name || '¿?')}</div>
+        <input class="amount" type="number" inputmode="decimal" step="0.5" value="${p.amount}" onchange="setAmount(${i}, this.value)"> €
+        <button class="toggle ${p.paid ? 'on' : ''}" onclick="togglePaid(${i})">${p.paid ? 'Pagado' : 'Sin pagar'}</button>
+        <button class="x" onclick="removePassenger(${i})">×</button>
+      </div>`).join('') || '<div class="muted">Nadie apuntado.</div>'}
+    <div style="margin-top:8px">
+      ${available.map(p => `<button class="btn ghost sm" style="margin:3px" onclick="addPassenger('${p.id}')">+ ${esc(p.name)}</button>`).join('')}
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input id="quickName" placeholder="Persona nueva…" class="grow">
+      <select id="quickPrice" style="width:84px"><option value="8">8 €</option><option value="10" selected>10 €</option></select>
+      <button class="btn sm" onclick="quickAdd()">Añadir</button>
+    </div>
+
+    <h3>Gasto</h3>
+    <div class="muted">Diésel: ${priceLabel}</div>
+    <div class="row" style="margin-top:6px">
+      <input id="manualPrice" type="number" inputmode="decimal" step="0.001" placeholder="Precio €/L manual" value="${t?.fuelSource === 'manual' ? t.fuelPrice : ''}">
+      <button class="btn ghost sm" onclick="setManualPrice()">Fijar</button>
+      <button class="btn ghost sm" onclick="autoPrice()" title="Buscar precio">↻ Auto</button>
+    </div>
+    <label>Otros gastos de este viaje (peajes, parking…)</label>
+    <input id="extra" type="number" inputmode="decimal" step="0.5" value="${t?.extra || ''}" onchange="setExtra(this.value)" placeholder="0">
+
+    <div class="card" style="margin-top:14px">
+      <div class="grid3">
+        <div><div class="muted">Cobro</div><div class="v">${eur(c.income)}</div></div>
+        <div><div class="muted">Gasto</div><div class="v">${c.cost != null ? eur(c.cost) : '—'}</div></div>
+        <div><div class="muted">Balance</div><div class="v">${balanceHtml(c)}</div></div>
+      </div>
+      <div class="muted" style="margin-top:8px;text-align:center">${c.km} km × ${db.settings.consumo} L/100 = ${c.litros.toFixed(1).replace('.', ',')} L${c.fuel != null ? ' → ' + eur(c.fuel) : ''}</div>
+      ${c.cost != null && c.income < c.cost ? `<div class="muted neg" style="text-align:center">Te faltan ${eur(c.cost - c.income)} para cubrir el viaje</div>` : ''}
+    </div>
+    ${t ? `<button class="btn danger" style="width:100%;margin-top:6px" onclick="deleteTrip()">Borrar este viaje</button>` : ''}
+  </div></div>`;
+}
+
+function addPassenger(pid) {
+  const t = ensureTrip(openDate);
+  t.passengers.push({ personId: pid, amount: person(pid).price, paid: false });
+  save(); renderSheet();
+  if (t.fuelPrice == null) autoPrice(true);
+}
+function quickAdd() {
+  const name = $('#quickName').value.trim(); if (!name) return;
+  const p = { id: uid(), name, price: num($('#quickPrice').value) };
+  db.people.push(p); addPassenger(p.id);
+}
+function setAmount(i, v) { tripOn(openDate).passengers[i].amount = num(v) || 0; save(); renderSheet(); }
+function togglePaid(i) { const p = tripOn(openDate).passengers[i]; p.paid = !p.paid; save(); renderSheet(); }
+function removePassenger(i) { tripOn(openDate).passengers.splice(i, 1); save(); renderSheet(); }
+function setExtra(v) { ensureTrip(openDate).extra = num(v) || 0; save(); renderSheet(); }
+function setManualPrice() {
+  const v = num($('#manualPrice').value); if (!isFinite(v) || v <= 0) return;
+  const t = ensureTrip(openDate); t.fuelPrice = v; t.fuelSource = 'manual'; t.fuelFinal = true; save(); renderSheet();
+}
+async function autoPrice(silent) {
+  const t = ensureTrip(openDate);
+  try {
+    t.fuelPrice = await fuelPriceFor(t.date); t.fuelSource = 'auto'; t.fuelFinal = t.date < todayIso();
+    save(); renderSheet();
+  } catch (e) { if (!silent) alert(e.message); }
+}
+function deleteTrip() {
+  if (!confirm('¿Borrar este viaje y sus pasajeros?')) return;
+  db.trips = db.trips.filter(t => t.date !== openDate); save(); openDate = null; $('#sheet').innerHTML = ''; render();
+}
+function newTripOtherDay() {
+  const d = prompt('Fecha del viaje (AAAA-MM-DD)', todayIso());
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+  openTrip(d);
+}
+
+// ---------- personas ----------
+function addPerson() {
+  const name = $('#newName').value.trim(); if (!name) return;
+  db.people.push({ id: uid(), name, price: num($('#newPrice').value) }); save(); render();
+}
+function setPrice(id, v) { person(id).price = num(v) || 0; save(); }
+function delPerson(id) {
+  const used = db.trips.some(t => t.passengers.some(p => p.personId === id));
+  if (used) return alert('Tiene viajes apuntados. Quítala de esos viajes primero.');
+  db.people = db.people.filter(p => p.id !== id); save(); render();
+}
+
+// ---------- backup ----------
+function exportData() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `mis-viajes-${todayIso()}.json`; a.click();
+}
+async function importData(file) {
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    if (!Array.isArray(d.trips) || !Array.isArray(d.people)) throw new Error('Archivo no válido');
+    if (!confirm('Esto reemplaza tus datos actuales. ¿Seguir?')) return;
+    db = Object.assign(defaults(), d); save(); render();
+  } catch (e) { alert(e.message); }
+}
+
+// ---------- arranque ----------
+function go(t) { tab = t; window.scrollTo(0, 0); render(); }
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.tab));
+render();
+refreshPrices();
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
