@@ -299,8 +299,16 @@ function tripCard(date) {
       <div class="row">${c && c.balance != null ? balanceHtml(c) : ''}${goBtn(date, skip)}</div>
     </div>
     <div style="margin-top:8px">${chips}</div>
+    ${skip ? '' : repeatCardBtn(date)}
     ${c && c.fuel != null ? `<div class="muted" style="margin-top:6px">Cobro ${eur(c.income)} · Diésel ${c.fuel != null ? eur(c.fuel) : '—'}${c.price ? ` (${c.price.toFixed(3).replace('.', ',')} €/L${t.fuelFinal || t.fuelSource === 'manual' ? '' : ' est.'})` : ''}</div>` : ''}
   </div>`;
+}
+
+function repeatCardBtn(date) {
+  const { prev, missing } = prevMissingFor(date);
+  // En la tarjeta solo si el anterior es el viaje justo antes (p. ej. la ida de ese mismo finde).
+  if (!missing.length || (parseIso(date) - parseIso(prev.date)) > 3 * 864e5) return '';
+  return `<button class="btn ghost sm" style="margin-top:8px;text-align:left" onclick="repeatPrev('${date}', event)">↺ ${repeatLabel(date, prev)}: ${missing.map(p => esc(person(p.personId).name)).join(', ')}</button>`;
 }
 
 function viewProximos() {
@@ -554,8 +562,7 @@ function renderSheet() {
   const c = t ? tripCalc(t) : tripCalc({ passengers: [], fuelPrice: null });
   const inTrip = new Set((t?.passengers || []).map(p => p.personId));
   const available = db.people.filter(p => !inTrip.has(p.id));
-  const prev = prevTrip(openDate);
-  const prevMissing = prev ? prev.passengers.filter(p => !inTrip.has(p.personId) && person(p.personId)) : [];
+  const { prev, missing: prevMissing } = prevMissingFor(openDate);
   const priceLabel = t?.fuelPrice != null
     ? `${t.fuelPrice.toFixed(3).replace('.', ',')} €/L · ${t.fuelSource === 'manual' ? 'manual' : t.fuelFinal ? 'precio de ese día' : 'precio de hoy (estimado)'}`
     : 'sin precio';
@@ -572,7 +579,7 @@ function renderSheet() {
         <button class="x" onclick="removePassenger(${i})">×</button>
       </div>`).join('') || '<div class="muted">Nadie apuntado.</div>'}
     ${prevMissing.length ? `<button class="btn ghost" style="width:100%;margin-top:10px;text-align:left" onclick="repeatPrev()">
-        ↺ Repetir viaje anterior <span class="muted">(${fmtDate(prev.date)}: ${prevMissing.map(p => esc(person(p.personId).name)).join(', ')})</span>
+        ↺ ${repeatLabel(openDate, prev)} <span class="muted">(${fmtDate(prev.date)}: ${prevMissing.map(p => esc(person(p.personId).name)).join(', ')})</span>
       </button>` : ''}
     <div style="margin-top:8px">
       ${available.map(p => `<button class="btn ghost sm" style="margin:3px" onclick="addPassenger('${p.id}')">+ ${esc(p.name)}</button>`).join('')}
@@ -619,15 +626,25 @@ function addPassenger(pid) {
 function prevTrip(date) {
   return db.trips.filter(t => t.date < date && t.passengers.length).sort((a, b) => b.date.localeCompare(a.date))[0];
 }
-function repeatPrev() {
-  const prev = prevTrip(openDate); if (!prev) return;
-  const t = ensureTrip(openDate);
+// Pasajeros del viaje anterior que aún no están en este.
+function prevMissingFor(date) {
+  const prev = prevTrip(date); if (!prev) return { prev: null, missing: [] };
+  const inTrip = new Set((tripOn(date)?.passengers || []).map(p => p.personId));
+  return { prev, missing: prev.passengers.filter(p => !inTrip.has(p.personId) && person(p.personId)) };
+}
+const repeatLabel = (date, prev) => dirFor(date) !== dirFor(prev.date) && (parseIso(date) - parseIso(prev.date)) <= 3 * 864e5
+  ? `Mismos que la ${dirFor(prev.date)}` : 'Mismos que el viaje anterior';
+function repeatPrev(date, ev) {
+  ev?.stopPropagation();
+  date = date || openDate;
+  const prev = prevTrip(date); if (!prev) return;
+  const t = ensureTrip(date);
   t.skip = false;
   const inTrip = new Set(t.passengers.map(p => p.personId));
   prev.passengers.filter(p => !inTrip.has(p.personId) && person(p.personId))
     .forEach(p => t.passengers.push({ personId: p.personId, amount: p.amount, paid: false }));
-  save(); renderSheet();
-  if (t.fuelPrice == null) autoPrice(true);
+  save(); if (openDate) renderSheet(); else render();
+  if (t.fuelPrice == null) refreshPrices();
 }
 function quickAdd() {
   const name = $('#quickName').value.trim(); if (!name) return;
