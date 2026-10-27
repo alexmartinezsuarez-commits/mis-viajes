@@ -100,10 +100,12 @@
 const API = 'https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/';
 const KEY = 'misviajes.v1';
 const FUEL_FIELD = 'Precio Gasoleo A';
+// Ruedas, aceite, revisiones y amortización: valor típico de un diésel compacto.
+const WEAR_DEFAULT = 0.06;
 
 // ---------- estado ----------
 const defaults = () => ({
-  settings: { km: 0, consumo: 5.8, prov: '', mun: '', munName: '', station: '', stationName: '', weeks: 4 },
+  settings: { km: 0, consumo: 5.8, desgaste: WEAR_DEFAULT, prov: '', mun: '', munName: '', station: '', stationName: '', weeks: 4 },
   people: [],
   trips: []
 });
@@ -153,10 +155,12 @@ function tripCalc(t) {
   const price = t.fuelPrice;
   const fuel = price != null ? litros * price : null;
   const extra = t.extra || 0;
+  const wearRate = db.settings.desgaste ?? WEAR_DEFAULT;
+  const wear = km * wearRate;
   const income = t.passengers.reduce((a, p) => a + (p.amount || 0), 0);
   const cobrado = t.passengers.filter(p => p.paid).reduce((a, p) => a + (p.amount || 0), 0);
-  const cost = fuel != null ? fuel + extra : null;
-  return { km, litros, price, fuel, extra, cost, income, cobrado, balance: cost != null ? income - cost : null };
+  const cost = fuel != null ? fuel + extra + wear : null;
+  return { km, litros, price, fuel, extra, wear, wearRate, cost, income, cobrado, balance: cost != null ? income - cost : null };
 }
 
 // ---------- API precios ----------
@@ -257,7 +261,7 @@ function tripCard(date) {
       <div>${c && t.passengers.length ? balanceHtml(c) : ''}</div>
     </div>
     <div style="margin-top:8px">${chips}</div>
-    ${c && t.passengers.length ? `<div class="muted" style="margin-top:6px">Cobro ${eur(c.income)} · Diésel ${c.fuel != null ? eur(c.fuel) : '—'}${c.price ? ` (${c.price.toFixed(3).replace('.', ',')} €/L${t.fuelFinal || t.fuelSource === 'manual' ? '' : ' est.'})` : ''}</div>` : ''}
+    ${c && t.passengers.length ? `<div class="muted" style="margin-top:6px">Cobro ${eur(c.income)} · Diésel ${c.fuel != null ? eur(c.fuel) : '—'}${c.price ? ` (${c.price.toFixed(3).replace('.', ',')} €/L${t.fuelFinal || t.fuelSource === 'manual' ? '' : ' est.'})` : ''}${c.wear ? ` · Desgaste ${eur(c.wear)}` : ''}</div>` : ''}
   </div>`;
 }
 
@@ -291,7 +295,7 @@ function viewHistorial() {
       <div class="big ${bal >= 0 ? 'pos' : 'neg'}">${bal >= 0 ? '+' : ''}${eur(bal)}</div>
       <div class="grid3" style="margin-top:10px">
         <div><div class="muted">Cobrado</div><div class="v">${eur(ing)}</div></div>
-        <div><div class="muted">Diésel+otros</div><div class="v">${eur(cost)}</div></div>
+        <div><div class="muted">Gastos</div><div class="v">${eur(cost)}</div></div>
         <div><div class="muted">Pendiente</div><div class="v warn">${eur(pend)}</div></div>
       </div>
       <div class="muted" style="margin-top:8px">${ing >= cost ? 'Cubres la gasolina con lo que pagan.' : `Pones de tu bolsillo ${eur(cost - ing)}.`} ${cost ? `Cubren el ${Math.round(ing / cost * 100)}% del gasto.` : ''}</div>
@@ -412,6 +416,9 @@ function viewAjustes() {
       <input id="km" type="number" inputmode="decimal" value="${s.km || ''}" placeholder="p. ej. 210">
       <label>Consumo (L/100 km)</label>
       <input id="consumo" type="number" inputmode="decimal" step="0.1" value="${s.consumo}">
+      <label>Desgaste del coche (€/km): ruedas, aceite, revisiones…</label>
+      <input id="desgaste" type="number" inputmode="decimal" step="0.01" min="0" value="${s.desgaste ?? WEAR_DEFAULT}">
+      <div class="muted">Típico entre 0,04 y 0,10 €/km. Pon 0 para no contarlo.</div>
       <label>Semanas a mostrar en Próximos</label>
       <input id="weeks" type="number" min="1" max="12" value="${s.weeks || 4}">
     </div>
@@ -434,7 +441,7 @@ function viewAjustes() {
 
 async function bindAjustes() {
   const s = db.settings;
-  ['km', 'consumo', 'weeks'].forEach(id => $('#' + id).addEventListener('change', e => {
+  ['km', 'consumo', 'desgaste', 'weeks'].forEach(id => $('#' + id).addEventListener('change', e => {
     s[id] = num(e.target.value) || 0; save();
     $('#subtitle').textContent = s.stationName ? `⛽ ${s.stationName} · ${s.km || '?'} km · ${s.consumo} L/100` : '';
   }));
@@ -530,8 +537,13 @@ function renderSheet() {
         <div><div class="muted">Gasto</div><div class="v">${c.cost != null ? eur(c.cost) : '—'}</div></div>
         <div><div class="muted">Balance</div><div class="v">${balanceHtml(c)}</div></div>
       </div>
-      <div class="muted" style="margin-top:8px;text-align:center">${c.km} km × ${db.settings.consumo} L/100 = ${c.litros.toFixed(1).replace('.', ',')} L${c.fuel != null ? ' → ' + eur(c.fuel) : ''}</div>
-      ${c.cost != null && c.income < c.cost ? `<div class="muted neg" style="text-align:center">Te faltan ${eur(c.cost - c.income)} para cubrir el viaje</div>` : ''}
+      <div class="muted" style="margin-top:10px">
+        <div class="row between"><span>Diésel: ${c.km} km × ${db.settings.consumo} L/100 = ${c.litros.toFixed(1).replace('.', ',')} L</span><span>${c.fuel != null ? eur(c.fuel) : '—'}</span></div>
+        ${c.wear ? `<div class="row between"><span>Desgaste: ${c.km} km × ${c.wearRate.toFixed(2).replace('.', ',')} €/km</span><span>${eur(c.wear)}</span></div>` : ''}
+        ${c.extra ? `<div class="row between"><span>Otros gastos</span><span>${eur(c.extra)}</span></div>` : ''}
+      </div>
+      ${c.cost != null && c.income < c.cost ? `<div class="muted neg" style="text-align:center;margin-top:6px">Te faltan ${eur(c.cost - c.income)} para cubrir el viaje</div>` : ''}
+      ${c.cost != null && c.wear && c.income < c.cost && c.income >= c.cost - c.wear ? `<div class="muted" style="text-align:center">Cubres la gasolina, pero no el desgaste del coche</div>` : ''}
     </div>
     ${t ? `<button class="btn danger" style="width:100%;margin-top:6px" onclick="deleteTrip()">Borrar este viaje</button>` : ''}
   </div></div>`;
