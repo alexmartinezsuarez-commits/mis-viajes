@@ -1,6 +1,6 @@
 // Cachea la app para que abra sin conexión. Las llamadas al Ministerio van siempre a red.
-const CACHE = 'misviajes-v1';
-const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg'];
+const CACHE = 'misviajes-v2';
+const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))));
 self.addEventListener('activate', e => e.waitUntil(
